@@ -1,0 +1,150 @@
+---
+title: "Spotify - Analisando o Arctic Monkeys"
+subtitle: "AnÃ¡lise interativa sobre os dados do Arctic Monkeys no Spotify"
+author: "Erick Santana Rodrigues"
+description: "AnÃ¡lise interativa sobre os dados do Arctic Monkeys no Spotify"
+tags: ["interactive","spotify"]
+date: '2018-09-12'
+output:
+  prettydoc::html_pretty:
+    df_print: paged
+    theme: cayman
+    highlight: github
+---
+
+
+<style>
+body {
+text-align: justify}
+</style>
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+
+library(tidyverse)
+library(here)
+library(spotifyr)
+library(plotly)
+library(fmsb)
+library(radarchart)
+theme_set(theme_minimal())
+
+```
+
+> Usarei a api do Spotify para obter dados sobre as músicas do Arctic Monkeys e então analisá-las e compará-las com as músicas do The Last Shadow Puppets, outra banda do cantor Alex Turner. 
+
+#Visão Geral:
+
+Primeiro uma rápida olhada nos dados disponíveis através da api do Spotify para saber com que tipo de informações iremos trabalhar.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+alexTurner <- read_csv(here("data/alex_turner.csv"))
+alexTurner$album_uri <- NULL
+alexTurner$track_uri <- NULL
+glimpse(alexTurner)
+
+```
+
+#Energia e valência:
+
+As músicas de ambas as bandas sempre me pareceram enérgicas e animadas, isso é verdade?
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+alexTurner$album_release_year <- as.factor(alexTurner$album_release_year)
+colnames(alexTurner)[6] <- "track"
+colnames(alexTurner)[2] <- "album"
+
+p <- alexTurner %>%
+    ggplot(aes(x = valence, y = energy, color = album_release_year)) +
+    geom_point(aes(label = track, label1 = album)) +
+    lims(x = c(0, 1), y = c(0, 1)) +
+    coord_fixed() +
+    geom_vline(xintercept = .5) +
+    geom_hline(yintercept = .5) +
+    labs(x = "valence", y = "energy", color = "year") +
+    facet_wrap(~artist)
+
+ggplotly(p, tooltip = c("label1", "label", "x", "y"))
+
+
+```
+
+As músicas de ambas as bandas se concentram acima dos quadrantes 3 e 4 (acima de 0.5 em energia), o que diz que sim, elas são enérgicas e o fato de haver uma concentração maior do lado direito indica que elas sãoo mais alegres que tristes. No caso do Arctic Monkeys é mais fácil observar isso pois a maior parte das músicas estão concentradas acima de 0.75 para energia e 0.5 para valência. Já o The Last Shadow Puppets tem os dados mais espalhados.
+
+#Popularidade:
+
+A popularidade do Arctic Monkeys tem aumentado com o passar dos anos? Como ela é comparada ao The Last Shadow Puppets?
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+p <-alexTurner %>%
+    ggplot(aes(x = album_release_year, y = album_popularity, color = artist, group = artist)) +
+    geom_line() +
+    geom_point(aes(label = album)) +
+    labs(x = "release year", y = "popularity", color = "album")
+    
+
+ggplotly(p, tooltip = c("label", "y"))
+
+```
+
+Da pra notar que o Arctic Monkeys sempre se manteve próximo dos 60, em termos de popularidade, ou acima desse valor. Seu maior sucesso é o novo disco e desde Suck It And See a banda tem mantido um nível crescente de popularidade. O The Last Shadow Puppets sofreu muito no ínicio, mas teve um aumento considerável no segundo álbum, porém da pra notar que ela é bem menos popular que o AM.
+
+#Semelhanças e diferenças:
+ 
+Quão parecidas são as músicas mais populares de cada uma das bandas? Escolherei as top 5 do Spotify.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+amPopular <- head(arrange(alexTurner,desc(track_popularity)), n = 5)
+amPopular <- data.frame(amPopular$track, amPopular$instrumentalness, amPopular$valence, amPopular$danceability, amPopular$speechiness, amPopular$energy)
+
+colnames(amPopular) = c("track", "instrumentalness", "valence ", "danceability", "speechiness", "energy")
+
+amPopular <- gather(amPopular, key=Label, value=Score, -track) %>%
+  spread(key=track, value=Score)
+
+chartJSRadar(amPopular, maxScale = 1, scaleStepWidth = .2)
+
+```
+
+As músicas mais famosas do Arctic Monkeys diferem bastante no quesito valência e um pouco menos em energia (variações maiores que 0.1), nas demais variáveis os valores são próximos (variáveis próximas de 0.1). A música mais diferente é a "Do I Wanna Know?" a menos enérgica e alegre (valência < 0.5) do grupo.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+sPopular <- alexTurner %>%
+    filter(artist == "The Last Shadow Puppets")
+
+sPopular <- head(arrange(sPopular,desc(track_popularity)), n = 5)
+sPopular <- data.frame(sPopular$track, sPopular$instrumentalness, sPopular$valence, sPopular$danceability, sPopular$speechiness, sPopular$energy)
+
+colnames(sPopular) = c("track", "instrumentalness", "valence ", "danceability", "speechiness", "energy")
+
+sPopular <- gather(sPopular, key=Label, value=Score, -track) %>%
+  spread(key=track, value=Score)
+
+chartJSRadar(sPopular, maxScale = 1, scaleStepWidth = .2)
+
+```
+
+As faixas mais populares de The Last Shadow Puppets também se mostram diferentes, mas dessa vez em uma intensidade maior, as únicas categorias com valores próximos (variações menores que 0.1) são speechiness e instrumentalness. A música mais diferente é "Aviation", a mais enérgica do grupo.
+
+#Notas preferidas:
+
+Qual a nota preferida de cada uma das bandas?
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+p <- alexTurner %>%
+    group_by(artist) %>%
+    ggplot(aes(x = key, fill = artist)) +
+    geom_bar() +
+    labs(x = "key", y = "count", color = "artist")
+
+ggplotly(p, tooltip = c("label", "x", "y"))
+
+```
+
+Eu esperava que ambas as bandas 'preferissem' as mesmas notas, no entanto, as notas mais usadas pelo AM são A e B enquanto que para o The Last Shadow Puppets tais notas são A, E e F#. É interessante notar que existem notas que nunca foram usadas.
+
